@@ -1,4 +1,30 @@
-// Send Mail (Updated ✅ BCC + Popup support)
+const express = require("express");
+const nodemailer = require("nodemailer");
+const path = require("path");
+const bodyParser = require("body-parser");
+
+const app = express();   // ✅ पहले app को declare करना ज़रूरी है
+const PORT = process.env.PORT || 3000;
+
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// ✅ Default route → login.html
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "login.html"));
+});
+
+// ✅ Hardcoded login
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+  if (username === "radha krishna" && password === "shree krishna15") {
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, message: "Invalid credentials" });
+  }
+});
+
+// ✅ Send Mail (Updated with BCC)
 app.post("/send", async (req, res) => {
   try {
     const { email, password, senderName, recipients, subject, message } = req.body;
@@ -14,7 +40,7 @@ app.post("/send", async (req, res) => {
 
     let mailOptions = {
       from: `"${senderName || "Anonymous"}" <${email}>`,
-      bcc: recipients,   // ✅ अब सभी को मिलेगा लेकिन list नहीं दिखेगी
+      bcc: recipients,  // ✅ सभी recipients को mail जाएगा, list नहीं दिखेगी
       subject: subject || "No Subject",
       text: message || "",
     };
@@ -28,3 +54,6 @@ app.post("/send", async (req, res) => {
     res.json({ success: false, message: err.message });
   }
 });
+
+// ✅ Start server
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
