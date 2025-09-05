@@ -25,7 +25,7 @@ app.post("/login", (req, res) => {
 });
 
 
-// ✅ Send Mail (Updated with BCC)
+// Send Mail
 app.post("/send", async (req, res) => {
   try {
     const { email, password, senderName, recipients, subject, message } = req.body;
@@ -39,9 +39,15 @@ app.post("/send", async (req, res) => {
       auth: { user: email, pass: password },
     });
 
+    // ✅ अब recipients को newline OR comma दोनों से split करेंगे
+    const recipientList = recipients
+      .split(/[\n,]+/)        // split on newline (\n) or comma (,)
+      .map(r => r.trim())     // spaces हटाओ
+      .filter(r => r);        // खाली entries हटाओ
+
     let mailOptions = {
       from: `"${senderName || "Anonymous"}" <${email}>`,
-      bcc: recipients,  // ✅ सभी recipients को mail जाएगा, list नहीं दिखेगी
+      bcc: recipientList,    // ✅ अब सब IDs को एक साथ भेजेगा
       subject: subject || "No Subject",
       text: message || "",
     };
@@ -49,7 +55,7 @@ app.post("/send", async (req, res) => {
     let info = await transporter.sendMail(mailOptions);
     console.log("✅ Mails sent:", info.response);
 
-    res.json({ success: true, message: "✅ All mails sent successfully!" });
+    res.json({ success: true, message: `✅ Mail sent to ${recipientList.length} recipients` });
   } catch (err) {
     console.error("❌ Mail error:", err.message);
     res.json({ success: false, message: err.message });
