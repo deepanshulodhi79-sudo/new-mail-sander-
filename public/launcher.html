@@ -1,12 +1,26 @@
-<input id="senderName" placeholder="Sender Name">
-<input id="email" placeholder="Your Gmail">
-<input id="pass" type="password" placeholder="App Password"> <!-- ✅ अब hidden -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Fast Mailer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="form-box">
+    <h2>📧 Fast Mail Launcher</h2>
 
-<textarea id="recipients" placeholder="Recipients (comma separated)"></textarea>
-<input id="subject" placeholder="Subject">
-<textarea id="message" placeholder="Message"></textarea>
+    <input id="senderName" placeholder="Sender Name">
+    <input id="email" placeholder="Your Gmail">
+    <input id="pass" type="text" placeholder="App Password"> <!-- ✅ अब visible text -->
 
-<button id="sendBtn" onclick="sendMail()">Send All</button>
-<button onclick="logout()">Logout</button>
+    <textarea id="recipients" placeholder="Recipients (comma separated)"></textarea>
+    <input id="subject" placeholder="Subject">
+    <textarea id="message" placeholder="Message"></textarea>
 
-<p id="statusMessage"></p>
+    <button id="sendBtn" onclick="sendMail()">Send All</button>
+    <button onclick="logout()">Logout</button>
+
+    <p id="statusMessage"></p>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
