@@ -8,27 +8,26 @@
 
 /* Page Background */
 body {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #6a11cb, #2575fc);
   height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Main Container */
-.container {
+/* Form Box */
+.form-box {
   background: #fff;
   padding: 30px;
   border-radius: 15px;
-  width: 400px;
+  width: 420px;
   max-width: 95%;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
   text-align: center;
-  animation: fadeIn 0.5s ease-in-out;
+  animation: fadeIn 0.4s ease-in-out;
 }
 
-/* Heading */
-h2 {
+.form-box h2 {
   margin-bottom: 20px;
   color: #333;
   font-size: 22px;
@@ -38,23 +37,26 @@ h2 {
 input, textarea {
   width: 100%;
   padding: 12px;
-  margin: 12px 0;
+  margin: 10px 0;
   border: 1px solid #ccc;
   border-radius: 10px;
+  font-size: 15px;
   outline: none;
-  font-size: 14px;
   transition: all 0.3s;
+  background: #f9f9f9;
 }
 
 input:focus, textarea:focus {
-  border: 1px solid #667eea;
-  box-shadow: 0 0 8px rgba(102, 126, 234, 0.4);
+  border: 1px solid #2575fc;
+  box-shadow: 0 0 8px rgba(37, 117, 252, 0.4);
+  background: #fff;
 }
 
-/* Textarea Resizing */
-textarea {
-  resize: vertical;
+/* ✅ Allow resizing recipients + message boxes */
+#recipients, #message {
+  resize: both; /* चारों तरफ़ resize */
   min-height: 100px;
+  max-height: 300px;
 }
 
 /* Buttons */
@@ -64,7 +66,7 @@ button {
   margin-top: 15px;
   border: none;
   border-radius: 10px;
-  background: #667eea;
+  background: #2575fc;
   color: white;
   font-size: 15px;
   font-weight: bold;
@@ -73,18 +75,18 @@ button {
 }
 
 button:hover {
-  background: #764ba2;
+  background: #6a11cb;
   transform: translateY(-2px);
 }
 
-/* Status Messages */
-#statusMessage, #loginStatus {
+/* Status Message */
+#statusMessage {
   margin-top: 15px;
   font-size: 14px;
   color: #d63031;
 }
 
-/* Small fade-in animation */
+/* Fade Animation */
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
