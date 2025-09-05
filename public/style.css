@@ -1,0 +1,91 @@
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Page Background */
+body {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Main Container */
+.container {
+  background: #fff;
+  padding: 30px;
+  border-radius: 15px;
+  width: 400px;
+  max-width: 95%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Heading */
+h2 {
+  margin-bottom: 20px;
+  color: #333;
+  font-size: 22px;
+}
+
+/* Inputs & Textareas */
+input, textarea {
+  width: 100%;
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  outline: none;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+input:focus, textarea:focus {
+  border: 1px solid #667eea;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.4);
+}
+
+/* Textarea Resizing */
+textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Buttons */
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 15px;
+  border: none;
+  border-radius: 10px;
+  background: #667eea;
+  color: white;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+button:hover {
+  background: #764ba2;
+  transform: translateY(-2px);
+}
+
+/* Status Messages */
+#statusMessage, #loginStatus {
+  margin-top: 15px;
+  font-size: 14px;
+  color: #d63031;
+}
+
+/* Small fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
