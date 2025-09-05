@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-// ✅ Hardcoded login
+// Hardcoded login
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
   if (username === "radha krishna" && password === "shree krishna15") {
@@ -23,6 +23,7 @@ app.post("/login", (req, res) => {
     res.json({ success: false, message: "Invalid credentials" });
   }
 });
+
 
 // ✅ Send Mail (Updated with BCC)
 app.post("/send", async (req, res) => {
