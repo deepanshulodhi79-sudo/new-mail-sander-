@@ -35,9 +35,15 @@ app.post("/send", async (req, res) => {
     }
 
    const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: email, pass: password },
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: email,
+    pass: password
+  }
 });
+
 
     // ✅ अब recipients को newline OR comma दोनों से split करेंगे
     const recipientList = recipients
