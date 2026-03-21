@@ -1,93 +1,11 @@
-/* Reset */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-}
-
-/* Page Background */
-body {
-  background: linear-gradient(135deg, #6a11cb, #2575fc);
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Form Box */
-.form-box {
-  background: #fff;
-  padding: 30px;
-  border-radius: 15px;
-  width: 420px;
-  max-width: 95%;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
-  text-align: center;
-  animation: fadeIn 0.4s ease-in-out;
-}
-
-.form-box h2 {
-  margin-bottom: 20px;
-  color: #333;
-  font-size: 22px;
-}
-
-/* Inputs & Textareas */
-input, textarea {
-  width: 100%;
-  padding: 12px;
-  margin: 10px 0;
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  font-size: 15px;
-  outline: none;
-  transition: all 0.3s;
-  background: #f9f9f9;
-}
-
-input:focus, textarea:focus {
-  border: 1px solid #2575fc;
-  box-shadow: 0 0 8px rgba(37, 117, 252, 0.4);
-  background: #fff;
-}
-
-/* ✅ Allow resizing recipients + message boxes */
-#recipients, #message {
-  resize: both; /* चारों तरफ़ resize */
-  min-height: 100px;
-  max-height: 300px;
-}
-
-/* Buttons */
-button {
-  width: 100%;
-  padding: 14px;
-  margin-top: 15px;
-  border: none;
-  border-radius: 10px;
-  background: #2575fc;
-  color: white;
-  font-size: 15px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: 0.3s;
-}
-
-button:hover {
-  background: #6a11cb;
-  transform: translateY(-2px);
-}
-
-/* Status Message */
-#statusMessage {
-  margin-top: 15px;
-  font-size: 14px;
-  color: #d63031;
-}
-
-/* Fade Animation */
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",sans-serif;}
+body{display:flex;justify-content:center;align-items:center;height:100vh;background:#f0f4f8;padding:20px;}
+.form-box, .form-grid{background:#fff;padding:25px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.1);width:800px;}
+h2{text-align:center;margin-bottom:20px;color:#111827;}
+.grid-row{display:flex;gap:15px;margin-bottom:15px;}
+.grid-row input,.grid-row textarea,.grid-row button{flex:1;padding:12px;border-radius:8px;border:1px solid #cbd5e1;font-size:14px;outline:none;}
+.grid-row textarea{min-height:100px;resize:vertical;}
+.grid-row input:focus,.grid-row textarea:focus{border-color:#3b82f6;box-shadow:0 0 8px rgba(59,130,246,0.3);}
+.grid-row button{border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;transition:0.3s;}
+.grid-row button:hover{background:#2563eb;}
+#statusMessage, #loginStatus{font-size:13px;color:#ef4444;margin-top:6px;text-align:center;}
