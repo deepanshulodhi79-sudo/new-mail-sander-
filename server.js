@@ -39,12 +39,17 @@ function delay(ms) {
 }
 
 function randomDelay() {
-  return Math.floor(Math.random() * 4000) + 3000; // 3–7 sec
+  return Math.floor(Math.random() * 4000) + 3000;
 }
 
 function getGreeting() {
   const arr = ["Hi", "Hello", "Hey"];
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ✅ FIXED FUNCTION (no spammy extras)
+function getVariation(msg) {
+  return msg; 
 }
 
 // ================= AUTH =================
@@ -81,7 +86,7 @@ app.post('/logout', (req, res) => {
   });
 });
 
-// ================= SEND MAIL (SMART SYSTEM) =================
+// ================= SEND MAIL =================
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
@@ -101,7 +106,6 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(Boolean);
 
-    // 🔥 Warmup logic
     let limit = warmupMode ? 3 : 10;
 
     if (dailyCount[email].count + recipientList.length > limit) {
@@ -115,7 +119,7 @@ app.post('/send', requireAuth, async (req, res) => {
       service: "gmail",
       auth: {
         user: email,
-        pass: password // ⚠️ App password
+        pass: password // App password
       }
     });
 
@@ -139,8 +143,6 @@ app.post('/send', requireAuth, async (req, res) => {
           <div style="font-family:Arial">
             <p>${greet} ${name},</p>
             <p>${finalMsg.replace(/\n/g, "<br>")}</p>
-            <br>
-            <small>If not relevant, ignore this email.</small>
           </div>
         `
       };
@@ -159,7 +161,7 @@ app.post('/send', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length} mails`
+      message: `✅ Sent ${recipientList.length}`
     });
 
   } catch (err) {
@@ -167,7 +169,7 @@ app.post('/send', requireAuth, async (req, res) => {
   }
 });
 
-// 🔥 Auto disable warmup after 3 days
+// 🔥 Auto disable warmup
 setTimeout(() => {
   warmupMode = false;
   console.log("🔥 Warmup OFF");
