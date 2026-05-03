@@ -26,7 +26,7 @@ app.post('/send', requireAuth, async (req, res) => {
       .filter(Boolean);
 
     // ⚠️ Gmail safe limit (realistic)
-    const MAX_PER_HOUR = 15;
+    const MAX_PER_HOUR = 20;
 
     if (mailLimits[email].count + recipientList.length > MAX_PER_HOUR) {
       return res.json({
