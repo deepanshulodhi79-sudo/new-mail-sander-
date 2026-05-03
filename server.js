@@ -163,12 +163,7 @@ function buildHtmlBody(message) {
             </td>
           </tr>
           <tr>
-            <td style="padding:0 32px 20px;">
-              <hr style="border:none;border-top:1px solid #eeeeee;margin:0 0 16px;">
-              <p style="font-size:12px;color:#999999;margin:0;">
-                To unsubscribe, reply with "unsubscribe" in the subject line.
-              </p>
-            </td>
+            <td style="padding:0 32px 20px;"></td>
           </tr>
         </table>
       </td>
@@ -235,15 +230,12 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
       subject: subject || "Quick Note",
 
-      // ✅ Inbox-friendly headers
+      // ✅ Inbox-friendly headers (no bulk signals)
       headers: {
         'Message-ID': generateMessageId(email),
         'Date': sendDate,
         'X-Mailer': 'Nodemailer',
         'X-Priority': '3',
-        'List-Unsubscribe': `<mailto:${email}?subject=unsubscribe>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        'Precedence': 'bulk',
         'MIME-Version': '1.0',
       },
 
