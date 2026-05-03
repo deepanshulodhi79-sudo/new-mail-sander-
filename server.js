@@ -1,20 +1,21 @@
-const sgMail = require('@sendgrid/mail');
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+// ================= SEND MAIL (ULTRA TUNED) =================
+
+const os = require('os');
 
 app.post('/send', requireAuth, async (req, res) => {
   try {
-    const { senderName, email, recipients, subject, message } = req.body;
+    const { senderName, email, password, recipients, subject, message } = req.body;
 
-    if (!email || !recipients) {
+    if (!email || !password || !recipients) {
       return res.json({
         success: false,
-        message: "Email and recipients required"
+        message: "Email, password and recipients required"
       });
     }
 
     const now = Date.now();
 
-    // ⏱️ Hourly limit reset
+    // ⏱️ Hourly reset
     if (!mailLimits[email] || now - mailLimits[email].startTime > 60 * 60 * 1000) {
       mailLimits[email] = { count: 0, startTime: now };
     }
@@ -24,66 +25,92 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(Boolean);
 
-    if (mailLimits[email].count + recipientList.length > 40) {
+    // ⚠️ Gmail safe limit (realistic)
+    const MAX_PER_HOUR = 15;
+
+    if (mailLimits[email].count + recipientList.length > MAX_PER_HOUR) {
       return res.json({
         success: false,
-        message: `❌ Max 40 mails/hour`
+        message: `❌ Max ${MAX_PER_HOUR}/hour | Remaining: ${MAX_PER_HOUR - mailLimits[email].count}`
       });
     }
 
-    // 🚀 SEND LOOP (SAFE + PERSONALIZED)
+    // ✅ Gmail transporter (pooled + stable)
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: email,
+        pass: password // ⚠️ App Password only
+      },
+      pool: true,
+      maxConnections: 1,
+      maxMessages: 50
+    });
+
+    // verify once
+    await transporter.verify();
+
+    // helper: extract simple name from email
+    const nameFromEmail = (e) => (e.split("@")[0] || "").replace(/[._-]/g, " ");
+
     for (let i = 0; i < recipientList.length; i++) {
       const to = recipientList[i];
+      const rName = nameFromEmail(to);
 
-      const msg = {
+      const msgId = `<${Date.now()}.${i}@${os.hostname()}>`;
+
+      const mailOptions = {
+        from: `"${senderName || "Your Name"}" <${email}>`,
         to,
-        from: {
-          email: email, // ⚠️ MUST BE VERIFIED IN SENDGRID
-          name: senderName || "Your Brand"
-        },
 
-        subject: `${subject || "Hello 👋"} ${Math.floor(Math.random()*1000)}`,
+        // slight variation to avoid exact duplicates
+        subject: `${subject || "Hello 👋"} ${Math.floor(Math.random() * 900 + 100)}`,
 
-        text: message || "Hello",
+        // plain text fallback
+        text: `Hi ${rName},\n\n${message || "Hello"}\n\n— ${senderName || "Team"}`,
 
+        // HTML body (clean + simple = better)
         html: `
-          <div style="font-family:Arial;padding:15px">
-            <h2>${subject || "Hello 👋"}</h2>
-            <p>${message || ""}</p>
+          <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;padding:12px">
+            <p>Hi ${rName},</p>
+            <p>${(message || "").replace(/\n/g, "<br/>")}</p>
 
             <br/>
             <p style="font-size:12px;color:#666">
-              This message was sent securely.
+              Sent securely • ${new Date().toLocaleString()}
             </p>
           </div>
         `,
 
+        // 🔐 inbox-friendly headers
         headers: {
-          "X-Priority": "3",
-          "X-Mailer": "NodeMailer-Pro",
+          "Message-ID": msgId,
+          "X-Mailer": "NodeMailer",
+          "List-Unsubscribe": `<mailto:${email}?subject=unsubscribe>`,
+          "Precedence": "bulk"
         }
       };
 
       try {
-        await sgMail.send(msg);
-        console.log(`✅ Sent to ${to}`);
+        await transporter.sendMail(mailOptions);
+        console.log("✅ Sent:", to);
       } catch (err) {
-        console.log(`❌ Failed ${to}`, err.response?.body || err.message);
+        console.log("❌ Failed:", to, err.message);
       }
 
-      // ⏳ Delay = inbox boost
-      await delay(900);
+      // ⏳ Slow down (CRITICAL)
+      await delay(2000); // 2 sec gap
     }
 
     mailLimits[email].count += recipientList.length;
 
     return res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length} mails`
+      message: `✅ Sent ${recipientList.length} | Used ${mailLimits[email].count}/${MAX_PER_HOUR}`
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("SEND ERROR:", err);
     return res.json({
       success: false,
       message: err.message
