@@ -5,7 +5,6 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -29,9 +28,7 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   store: sessionStore,
-  cookie: {
-    maxAge: 60 * 60 * 1000
-  }
+  cookie: { maxAge: 60 * 60 * 1000 }
 }));
 
 // ================= HELPERS =================
@@ -40,7 +37,7 @@ function delay(ms) {
 }
 
 function fullServerReset() {
-  console.log("🔁 FULL RESET");
+  console.log("🔁 RESET");
   launcherLocked = true;
   mailLimits = {};
 
@@ -62,40 +59,30 @@ function requireAuth(req, res, next) {
 }
 
 // ================= ROUTES =================
-
-// Login page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Login
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   if (launcherLocked) {
-    return res.json({
-      success: false,
-      message: "⛔ Reset ho raha hai"
-    });
+    return res.json({ success: false, message: "⛔ Reset ho raha hai" });
   }
 
   if (username === HARD_USERNAME && password === HARD_PASSWORD) {
     req.session.user = username;
-
     setTimeout(fullServerReset, 60 * 60 * 1000);
-
     return res.json({ success: true });
   }
 
   return res.json({ success: false, message: "❌ Invalid" });
 });
 
-// Launcher
 app.get('/launcher', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
 });
 
-// Logout
 app.post('/logout', (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('connect.sid');
@@ -126,7 +113,7 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(Boolean);
 
-    const MAX_PER_HOUR = 20;
+    const MAX_PER_HOUR = 10;
 
     if (mailLimits[email].count + recipientList.length > MAX_PER_HOUR) {
       return res.json({
@@ -140,40 +127,39 @@ app.post('/send', requireAuth, async (req, res) => {
       service: "gmail",
       auth: {
         user: email,
-        pass: password // ⚠️ App password
-      },
-      pool: true,
-      maxConnections: 1
+        pass: password // ⚠️ App Password only
+      }
     });
 
     await transporter.verify();
 
     for (let i = 0; i < recipientList.length; i++) {
       const to = recipientList[i];
-
       const name = to.split("@")[0];
-      const msgId = `<${Date.now()}.${i}@${os.hostname()}>`;
+
+      const greetings = ["Hi", "Hello", "Hey"];
+      const greet = greetings[Math.floor(Math.random() * greetings.length)];
 
       const mailOptions = {
         from: `"${senderName || "Your Name"}" <${email}>`,
         to,
-        subject: `${subject || "Hello"} ${Math.floor(Math.random()*1000)}`,
+        subject: subject || "Quick note",
 
-        text: `Hi ${name},\n\n${message || "Hello"}`,
+        text: `${greet} ${name},\n\n${message || "Hello"}`,
 
         html: `
           <div style="font-family:Arial">
-            <p>Hi ${name},</p>
+            <p>${greet} ${name},</p>
             <p>${(message || "").replace(/\n/g, "<br>")}</p>
             <br>
-            <small>Secure message</small>
+            <p style="font-size:12px;color:#666">
+              If this email is not relevant, you can ignore it.
+            </p>
           </div>
         `,
 
         headers: {
-          "Message-ID": msgId,
-          "X-Mailer": "NodeMailer",
-          "List-Unsubscribe": `<mailto:${email}>`
+          "X-Mailer": "NodeMailer"
         }
       };
 
@@ -184,7 +170,8 @@ app.post('/send', requireAuth, async (req, res) => {
         console.log("❌ Error:", err.message);
       }
 
-      await delay(2000); // VERY IMPORTANT
+      // ⏳ Delay (important)
+      await delay(2500);
     }
 
     mailLimits[email].count += recipientList.length;
