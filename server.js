@@ -9,13 +9,15 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// 🔑 Hardcoded login
+// 🔑 Login
 const HARD_USERNAME = "!@#$%^&*())(*&^%$#@!@#$%^&*";
 const HARD_PASSWORD = "!@#$%^&*())(*&^%$#@!@#$%^&*";
 
-// ================= GLOBAL STATE =================
-let mailLimits = {};
+// ================= GLOBAL =================
 let launcherLocked = false;
+let dailyCount = {};
+let warmupMode = true;
+
 const sessionStore = new session.MemoryStore();
 
 // ================= MIDDLEWARE =================
@@ -36,19 +38,23 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function fullServerReset() {
-  console.log("🔁 RESET");
-  launcherLocked = true;
-  mailLimits = {};
+function randomDelay() {
+  return Math.floor(Math.random() * 4000) + 3000; // 3–7 sec
+}
 
-  sessionStore.clear(() => {
-    console.log("🧹 Sessions cleared");
-  });
+function getGreeting() {
+  const arr = ["Hi", "Hello", "Hey"];
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
-  setTimeout(() => {
-    launcherLocked = false;
-    console.log("✅ Unlocked");
-  }, 2000);
+function getVariation(msg) {
+  const extras = [
+    "",
+    "Just checking in.",
+    "Let me know your thoughts.",
+    "Looking forward to your reply."
+  ];
+  return msg + "\n\n" + extras[Math.floor(Math.random() * extras.length)];
 }
 
 // ================= AUTH =================
@@ -66,17 +72,12 @@ app.get('/', (req, res) => {
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
-  if (launcherLocked) {
-    return res.json({ success: false, message: "⛔ Reset ho raha hai" });
-  }
-
   if (username === HARD_USERNAME && password === HARD_PASSWORD) {
     req.session.user = username;
-    setTimeout(fullServerReset, 60 * 60 * 1000);
     return res.json({ success: true });
   }
 
-  return res.json({ success: false, message: "❌ Invalid" });
+  return res.json({ success: false });
 });
 
 app.get('/launcher', requireAuth, (req, res) => {
@@ -90,22 +91,19 @@ app.post('/logout', (req, res) => {
   });
 });
 
-// ================= SEND MAIL =================
+// ================= SEND MAIL (SMART SYSTEM) =================
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
 
     if (!email || !password || !recipients) {
-      return res.json({
-        success: false,
-        message: "Email, password and recipients required"
-      });
+      return res.json({ success: false, message: "Required fields missing" });
     }
 
-    const now = Date.now();
+    const today = new Date().toDateString();
 
-    if (!mailLimits[email] || now - mailLimits[email].startTime > 3600000) {
-      mailLimits[email] = { count: 0, startTime: now };
+    if (!dailyCount[email] || dailyCount[email].date !== today) {
+      dailyCount[email] = { count: 0, date: today };
     }
 
     const recipientList = recipients
@@ -113,21 +111,21 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(Boolean);
 
-    const MAX_PER_HOUR = 10;
+    // 🔥 Warmup logic
+    let limit = warmupMode ? 3 : 10;
 
-    if (mailLimits[email].count + recipientList.length > MAX_PER_HOUR) {
+    if (dailyCount[email].count + recipientList.length > limit) {
       return res.json({
         success: false,
-        message: `❌ Max ${MAX_PER_HOUR}/hour`
+        message: `❌ Limit reached (${limit}/day)`
       });
     }
 
-    // ✅ Gmail transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: email,
-        pass: password // ⚠️ App Password only
+        pass: password // ⚠️ App password
       }
     });
 
@@ -137,30 +135,24 @@ app.post('/send', requireAuth, async (req, res) => {
       const to = recipientList[i];
       const name = to.split("@")[0];
 
-      const greetings = ["Hi", "Hello", "Hey"];
-      const greet = greetings[Math.floor(Math.random() * greetings.length)];
+      const greet = getGreeting();
+      const finalMsg = getVariation(message || "Hello");
 
       const mailOptions = {
         from: `"${senderName || "Your Name"}" <${email}>`,
         to,
-        subject: subject || "Quick note",
+        subject: subject || "Hello",
 
-        text: `${greet} ${name},\n\n${message || "Hello"}`,
+        text: `${greet} ${name},\n\n${finalMsg}`,
 
         html: `
           <div style="font-family:Arial">
             <p>${greet} ${name},</p>
-            <p>${(message || "").replace(/\n/g, "<br>")}</p>
+            <p>${finalMsg.replace(/\n/g, "<br>")}</p>
             <br>
-            <p style="font-size:12px;color:#666">
-              If this email is not relevant, you can ignore it.
-            </p>
+            <small>If not relevant, ignore this email.</small>
           </div>
-        `,
-
-        headers: {
-          "X-Mailer": "NodeMailer"
-        }
+        `
       };
 
       try {
@@ -170,25 +162,26 @@ app.post('/send', requireAuth, async (req, res) => {
         console.log("❌ Error:", err.message);
       }
 
-      // ⏳ Delay (important)
-      await delay(2500);
+      await delay(randomDelay());
     }
 
-    mailLimits[email].count += recipientList.length;
+    dailyCount[email].count += recipientList.length;
 
     res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length}`
+      message: `✅ Sent ${recipientList.length} mails`
     });
 
   } catch (err) {
-    console.error(err);
-    res.json({
-      success: false,
-      message: err.message
-    });
+    res.json({ success: false, message: err.message });
   }
 });
+
+// 🔥 Auto disable warmup after 3 days
+setTimeout(() => {
+  warmupMode = false;
+  console.log("🔥 Warmup OFF");
+}, 3 * 24 * 60 * 60 * 1000);
 
 // ================= START =================
 app.listen(PORT, () => {
