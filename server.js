@@ -1,7 +1,109 @@
-// ================= SEND MAIL (ULTRA TUNED) =================
+require('dotenv').config();
 
+const express = require('express');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const nodemailer = require('nodemailer');
+const path = require('path');
 const os = require('os');
 
+const app = express();
+const PORT = process.env.PORT || 8080;
+
+// 🔑 Hardcoded login
+const HARD_USERNAME = "!@#$%^&*())(*&^%$#@!@#$%^&*";
+const HARD_PASSWORD = "!@#$%^&*())(*&^%$#@!@#$%^&*";
+
+// ================= GLOBAL STATE =================
+let mailLimits = {};
+let launcherLocked = false;
+const sessionStore = new session.MemoryStore();
+
+// ================= MIDDLEWARE =================
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(session({
+  secret: 'bulk-mailer-secret',
+  resave: false,
+  saveUninitialized: true,
+  store: sessionStore,
+  cookie: {
+    maxAge: 60 * 60 * 1000
+  }
+}));
+
+// ================= HELPERS =================
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function fullServerReset() {
+  console.log("🔁 FULL RESET");
+  launcherLocked = true;
+  mailLimits = {};
+
+  sessionStore.clear(() => {
+    console.log("🧹 Sessions cleared");
+  });
+
+  setTimeout(() => {
+    launcherLocked = false;
+    console.log("✅ Unlocked");
+  }, 2000);
+}
+
+// ================= AUTH =================
+function requireAuth(req, res, next) {
+  if (launcherLocked) return res.redirect('/');
+  if (req.session.user) return next();
+  return res.redirect('/');
+}
+
+// ================= ROUTES =================
+
+// Login page
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Login
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+
+  if (launcherLocked) {
+    return res.json({
+      success: false,
+      message: "⛔ Reset ho raha hai"
+    });
+  }
+
+  if (username === HARD_USERNAME && password === HARD_PASSWORD) {
+    req.session.user = username;
+
+    setTimeout(fullServerReset, 60 * 60 * 1000);
+
+    return res.json({ success: true });
+  }
+
+  return res.json({ success: false, message: "❌ Invalid" });
+});
+
+// Launcher
+app.get('/launcher', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
+});
+
+// Logout
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
+});
+
+// ================= SEND MAIL =================
 app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
@@ -15,8 +117,7 @@ app.post('/send', requireAuth, async (req, res) => {
 
     const now = Date.now();
 
-    // ⏱️ Hourly reset
-    if (!mailLimits[email] || now - mailLimits[email].startTime > 60 * 60 * 1000) {
+    if (!mailLimits[email] || now - mailLimits[email].startTime > 3600000) {
       mailLimits[email] = { count: 0, startTime: now };
     }
 
@@ -25,69 +126,54 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(Boolean);
 
-    // ⚠️ Gmail safe limit (realistic)
     const MAX_PER_HOUR = 20;
 
     if (mailLimits[email].count + recipientList.length > MAX_PER_HOUR) {
       return res.json({
         success: false,
-        message: `❌ Max ${MAX_PER_HOUR}/hour | Remaining: ${MAX_PER_HOUR - mailLimits[email].count}`
+        message: `❌ Max ${MAX_PER_HOUR}/hour`
       });
     }
 
-    // ✅ Gmail transporter (pooled + stable)
+    // ✅ Gmail transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: email,
-        pass: password // ⚠️ App Password only
+        pass: password // ⚠️ App password
       },
       pool: true,
-      maxConnections: 1,
-      maxMessages: 50
+      maxConnections: 1
     });
 
-    // verify once
     await transporter.verify();
-
-    // helper: extract simple name from email
-    const nameFromEmail = (e) => (e.split("@")[0] || "").replace(/[._-]/g, " ");
 
     for (let i = 0; i < recipientList.length; i++) {
       const to = recipientList[i];
-      const rName = nameFromEmail(to);
 
+      const name = to.split("@")[0];
       const msgId = `<${Date.now()}.${i}@${os.hostname()}>`;
 
       const mailOptions = {
         from: `"${senderName || "Your Name"}" <${email}>`,
         to,
+        subject: `${subject || "Hello"} ${Math.floor(Math.random()*1000)}`,
 
-        // slight variation to avoid exact duplicates
-        subject: `${subject || "Hello 👋"} ${Math.floor(Math.random() * 900 + 100)}`,
+        text: `Hi ${name},\n\n${message || "Hello"}`,
 
-        // plain text fallback
-        text: `Hi ${rName},\n\n${message || "Hello"}\n\n— ${senderName || "Team"}`,
-
-        // HTML body (clean + simple = better)
         html: `
-          <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;padding:12px">
-            <p>Hi ${rName},</p>
-            <p>${(message || "").replace(/\n/g, "<br/>")}</p>
-
-            <br/>
-            <p style="font-size:12px;color:#666">
-              Sent securely • ${new Date().toLocaleString()}
-            </p>
+          <div style="font-family:Arial">
+            <p>Hi ${name},</p>
+            <p>${(message || "").replace(/\n/g, "<br>")}</p>
+            <br>
+            <small>Secure message</small>
           </div>
         `,
 
-        // 🔐 inbox-friendly headers
         headers: {
           "Message-ID": msgId,
           "X-Mailer": "NodeMailer",
-          "List-Unsubscribe": `<mailto:${email}?subject=unsubscribe>`,
-          "Precedence": "bulk"
+          "List-Unsubscribe": `<mailto:${email}>`
         }
       };
 
@@ -95,25 +181,29 @@ app.post('/send', requireAuth, async (req, res) => {
         await transporter.sendMail(mailOptions);
         console.log("✅ Sent:", to);
       } catch (err) {
-        console.log("❌ Failed:", to, err.message);
+        console.log("❌ Error:", err.message);
       }
 
-      // ⏳ Slow down (CRITICAL)
-      await delay(2000); // 2 sec gap
+      await delay(2000); // VERY IMPORTANT
     }
 
     mailLimits[email].count += recipientList.length;
 
-    return res.json({
+    res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length} | Used ${mailLimits[email].count}/${MAX_PER_HOUR}`
+      message: `✅ Sent ${recipientList.length}`
     });
 
   } catch (err) {
-    console.error("SEND ERROR:", err);
-    return res.json({
+    console.error(err);
+    res.json({
       success: false,
       message: err.message
     });
   }
+});
+
+// ================= START =================
+app.listen(PORT, () => {
+  console.log(`🚀 Running on port ${PORT}`);
 });
