@@ -47,16 +47,6 @@ function getGreeting() {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function getVariation(msg) {
-  const extras = [
-    "",
-    "Just checking in.",
-    "Let me know your thoughts.",
-    "Looking forward to your reply."
-  ];
-  return msg + "\n\n" + extras[Math.floor(Math.random() * extras.length)];
-}
-
 // ================= AUTH =================
 function requireAuth(req, res, next) {
   if (launcherLocked) return res.redirect('/');
