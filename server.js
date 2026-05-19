@@ -1,116 +1,59 @@
 // server.js
+
 require('dotenv').config();
+
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 const path = require('path');
+const validator = require('validator');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
+
 const PORT = process.env.PORT || 8080;
 
-// 🔑 Hardcoded login
-const HARD_USERNAME = "!@#$%^&*())(*&^%$#@!@#$%^&*";
-const HARD_PASSWORD = "!@#$%^&*())(*&^%$#@!@#$%^&*";
+// ================= CONFIG =================
+
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // ================= GLOBAL STATE =================
 
-// Per-sender hourly mail limit
 let mailLimits = {};
 
-// Global launcher lock
-let launcherLocked = false;
-
-// Session store
 const sessionStore = new session.MemoryStore();
 
 // ================= MIDDLEWARE =================
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session (1 hour life)
-app.use(session({
-  secret: 'bulk-mailer-secret',
-  resave: false,
-  saveUninitialized: true,
-  store: sessionStore,
-  cookie: {
-    maxAge: 60 * 60 * 1000 // 1 hour
+// Rate limit
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: {
+    success: false,
+    message: "Too many requests"
   }
 }));
 
-// ================= FULL RESET =================
-
-function fullServerReset() {
-  console.log("🔁 FULL LAUNCHER RESET");
-
-  launcherLocked = true;
-  mailLimits = {};
-
-  sessionStore.clear(() => {
-    console.log("🧹 All sessions cleared");
-  });
-
-  setTimeout(() => {
-    launcherLocked = false;
-    console.log("✅ Launcher unlocked for fresh login");
-  }, 2000);
-}
-
-// ================= AUTH =================
-
-function requireAuth(req, res, next) {
-  if (launcherLocked) return res.redirect('/');
-  if (req.session.user) return next();
-  return res.redirect('/');
-}
-
-// ================= ROUTES =================
-
-// Login page
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-
-// Login
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-
-  if (launcherLocked) {
-    return res.json({
-      success: false,
-      message: "⛔ Launcher reset ho raha hai, thodi der baad login karo"
-    });
+// Session
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'secret_key',
+  resave: false,
+  saveUninitialized: false,
+  store: sessionStore,
+  cookie: {
+    maxAge: 60 * 60 * 1000,
+    httpOnly: true,
+    secure: false
   }
-
-  if (username === HARD_USERNAME && password === HARD_PASSWORD) {
-    req.session.user = username;
-
-    // ⏱️ Full reset after 1 hour
-    setTimeout(fullServerReset, 60 * 60 * 1000);
-
-    return res.json({ success: true });
-  }
-
-  return res.json({ success: false, message: "❌ Invalid credentials" });
-});
-
-// Launcher page
-app.get('/launcher', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
-});
-
-// ================= LOGOUT =================
-app.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('connect.sid');
-    return res.json({
-      success: true,
-      message: "✅ Logged out successfully"
-    });
-  });
-});
+}));
 
 // ================= HELPERS =================
 
@@ -118,79 +61,261 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function sendBatch(transporter, mails, batchSize = 5) {
-  for (let i = 0; i < mails.length; i += batchSize) {
-    await Promise.allSettled(
-      mails.slice(i, i + batchSize).map(m => transporter.sendMail(m))
-    );
-    await delay(300);
+async function sendSequential(transporter, mails) {
+
+  for (const mail of mails) {
+
+    await transporter.sendMail(mail);
+
+    console.log(`✅ Sent to ${mail.to}`);
+
+    // Human-like delay
+    const randomDelay =
+      Math.floor(Math.random() * 4000) + 3000;
+
+    await delay(randomDelay);
   }
 }
+
+// ================= AUTH =================
+
+function requireAuth(req, res, next) {
+
+  if (req.session.user) {
+    return next();
+  }
+
+  return res.redirect('/');
+}
+
+// ================= ROUTES =================
+
+// Login page
+app.get('/', (req, res) => {
+
+  res.sendFile(
+    path.join(__dirname, 'public', 'login.html')
+  );
+
+});
+
+// Login
+app.post('/login', (req, res) => {
+
+  const { username, password } = req.body;
+
+  if (
+    username === ADMIN_USERNAME &&
+    password === ADMIN_PASSWORD
+  ) {
+
+    req.session.user = username;
+
+    return res.json({
+      success: true
+    });
+
+  }
+
+  return res.json({
+    success: false,
+    message: "Invalid credentials"
+  });
+
+});
+
+// Launcher page
+app.get('/launcher', requireAuth, (req, res) => {
+
+  res.sendFile(
+    path.join(__dirname, 'public', 'launcher.html')
+  );
+
+});
+
+// Logout
+app.post('/logout', (req, res) => {
+
+  req.session.destroy(() => {
+
+    res.clearCookie('connect.sid');
+
+    return res.json({
+      success: true,
+      message: "Logged out"
+    });
+
+  });
+
+});
 
 // ================= SEND MAIL =================
 
 app.post('/send', requireAuth, async (req, res) => {
-  try {
-    const { senderName, email, password, recipients, subject, message } = req.body;
 
-    if (!email || !password || !recipients) {
+  try {
+
+    const {
+      senderName,
+      recipients,
+      subject,
+      message
+    } = req.body;
+
+    // Validate recipients
+    if (!recipients) {
+
       return res.json({
         success: false,
-        message: "Email, password and recipients required"
+        message: "Recipients required"
       });
+
     }
 
-    const now = Date.now();
-
-    // ⏱️ Hourly sender reset
-    if (!mailLimits[email] || now - mailLimits[email].startTime > 60 * 60 * 1000) {
-      mailLimits[email] = { count: 0, startTime: now };
-    }
-
+    // Parse recipients
     const recipientList = recipients
       .split(/[\n,]+/)
       .map(r => r.trim())
-      .filter(Boolean);
+      .filter(r => validator.isEmail(r));
 
-    if (mailLimits[email].count + recipientList.length > 27) {
+    if (recipientList.length === 0) {
+
       return res.json({
         success: false,
-        message: `❌ Max 27 mails/hour | Remaining: ${27 - mailLimits[email].count}`
+        message: "No valid recipients found"
       });
+
     }
 
+    // ================= RATE LIMIT =================
+
+    const smtpUser = process.env.SMTP_USER;
+
+    const now = Date.now();
+
+    if (
+      !mailLimits[smtpUser] ||
+      now - mailLimits[smtpUser].startTime >
+      60 * 60 * 1000
+    ) {
+
+      mailLimits[smtpUser] = {
+        count: 0,
+        startTime: now
+      };
+
+    }
+
+    const MAX_PER_HOUR = 25;
+
+    if (
+      mailLimits[smtpUser].count +
+      recipientList.length >
+      MAX_PER_HOUR
+    ) {
+
+      return res.json({
+        success: false,
+        message:
+          `Hourly limit exceeded. Remaining: ${
+            MAX_PER_HOUR -
+            mailLimits[smtpUser].count
+          }`
+      });
+
+    }
+
+    // ================= SMTP =================
+
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user: email, pass: password }
+
+      host: process.env.SMTP_HOST,
+
+      port: Number(process.env.SMTP_PORT),
+
+      secure: false,
+
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+
     });
 
-    const mails = recipientList.map(r => ({
-      from: `"${senderName || 'Anonymous'}" <${email}>`,
-      to: r,
+    // Verify SMTP
+    await transporter.verify();
 
-      // ✅ Re removed + inbox friendly subject
-      subject: subject || "Quick Note",
+    // ================= CREATE MAILS =================
 
-      text: (message || "")
+    const mails = recipientList.map(recipient => ({
+
+      from:
+        `"${senderName || 'Support'}" <${process.env.SMTP_USER}>`,
+
+      to: recipient,
+
+      subject: subject || 'Update',
+
+      text: message || '',
+
+      html: `
+      <div style="font-family:Arial,sans-serif;padding:20px;line-height:1.6">
+
+        <h2>
+          ${subject || 'Update'}
+        </h2>
+
+        <p>
+          ${message || ''}
+        </p>
+
+        <hr>
+
+        <small style="color:gray">
+          You received this email because you subscribed to updates.
+        </small>
+
+      </div>
+      `,
+
+      headers: {
+        "List-Unsubscribe":
+          "<mailto:unsubscribe@yourdomain.com>"
+      }
+
     }));
 
-    await sendBatch(transporter, mails, 5);
+    // ================= SEND =================
 
-    mailLimits[email].count += recipientList.length;
+    await sendSequential(transporter, mails);
+
+    mailLimits[smtpUser].count += recipientList.length;
 
     return res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length} | Used ${mailLimits[email].count}/27`
+      message:
+        `✅ Sent ${recipientList.length} email(s)`
     });
 
   } catch (err) {
-    return res.json({ success: false, message: err.message });
+
+    console.error(err);
+
+    return res.json({
+      success: false,
+      message: err.message
+    });
+
   }
+
 });
 
-// ================= START =================
+// ================= START SERVER =================
+
 app.listen(PORT, () => {
-  console.log(`🚀 Mail Launcher running on port ${PORT}`);
+
+  console.log(
+    `🚀 Server running on port ${PORT}`
+  );
+
 });
