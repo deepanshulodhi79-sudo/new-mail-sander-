@@ -9,17 +9,20 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// LOGIN
+// ================= LOGIN =================
+
 const HARD_USERNAME = "!@#$%^&*())(*&^%$#@!@#$%^&*";
 const HARD_PASSWORD = "!@#$%^&*())(*&^%$#@!@#$%^&*";
 
-// GLOBAL
+// ================= GLOBAL =================
+
 let mailLimits = {};
 let launcherLocked = false;
 
 const sessionStore = new session.MemoryStore();
 
-// MIDDLEWARE
+// ================= MIDDLEWARE =================
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
@@ -35,22 +38,25 @@ app.use(session({
   }
 }));
 
-// RESET
+// ================= RESET =================
+
 function fullServerReset() {
 
   launcherLocked = true;
   mailLimits = {};
 
   sessionStore.clear(() => {
-    console.log("Sessions cleared");
+    console.log("🧹 Sessions cleared");
   });
 
   setTimeout(() => {
     launcherLocked = false;
+    console.log("✅ Launcher unlocked");
   }, 2000);
 }
 
-// AUTH
+// ================= AUTH =================
+
 function requireAuth(req, res, next) {
 
   if (launcherLocked) {
@@ -64,8 +70,9 @@ function requireAuth(req, res, next) {
   return res.redirect('/');
 }
 
-// ROUTES
+// ================= ROUTES =================
 
+// HOME
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
@@ -122,7 +129,8 @@ app.post('/logout', (req, res) => {
 
 });
 
-// SEND MAIL
+// ================= SEND MAIL =================
+
 app.post('/send', requireAuth, async (req, res) => {
 
   try {
@@ -137,14 +145,17 @@ app.post('/send', requireAuth, async (req, res) => {
     } = req.body;
 
     if (!email || !password || !recipients) {
+
       return res.json({
         success: false,
-        message: "Fill all required fields"
+        message: "❌ Fill all required fields"
       });
+
     }
 
     const now = Date.now();
 
+    // hourly reset
     if (
       !mailLimits[email] ||
       now - mailLimits[email].startTime > 60 * 60 * 1000
@@ -162,66 +173,99 @@ app.post('/send', requireAuth, async (req, res) => {
       .map(r => r.trim())
       .filter(Boolean);
 
+    // limit
     if (mailLimits[email].count + recipientList.length > 27) {
 
       return res.json({
         success: false,
-        message: `Limit exceeded. Remaining: ${27 - mailLimits[email].count}`
+        message: `❌ Limit exceeded | Remaining: ${27 - mailLimits[email].count}`
       });
 
     }
 
-    // SMTP
+    // ================= SMTP =================
+
     const transporter = nodemailer.createTransport({
 
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
 
       auth: {
         user: email,
         pass: password
       },
 
+      requireTLS: true,
+
       tls: {
         rejectUnauthorized: false
-      }
+      },
+
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000
 
     });
 
-    // SEND
+    // ================= SEND =================
+
+    let sentCount = 0;
+
     for (const recipient of recipientList) {
 
       try {
 
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
 
           from: `"${senderName || 'Anonymous'}" <${email}>`,
+
           to: recipient,
+
           subject: subject || "Quick Note",
+
           text: message || ""
 
         });
 
-        mailLimits[email].count++;
+        console.log("✅ Sent:", recipient);
+        console.log(info.response);
 
-        console.log("Sent:", recipient);
+        sentCount++;
+        mailLimits[email].count++;
 
       } catch (mailErr) {
 
-        console.log("Failed:", recipient, mailErr.message);
+        console.log("❌ Failed:", recipient);
+        console.log(mailErr.message);
 
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
-    return res.json({
-      success: true,
-      message: `Successfully sent ${recipientList.length} mails`
-    });
+    // response
+    if (sentCount > 0) {
+
+      return res.json({
+        success: true,
+        message: `✅ Successfully sent ${sentCount} mail(s)`
+      });
+
+    } else {
+
+      return res.json({
+        success: false,
+        message: "❌ Gmail blocked or failed to send"
+      });
+
+    }
 
   } catch (err) {
 
-    console.log("MAIL ERROR:", err);
+    console.log("MAIL ERROR:");
+    console.log(err);
 
     return res.json({
       success: false,
@@ -232,7 +276,8 @@ app.post('/send', requireAuth, async (req, res) => {
 
 });
 
-// START
+// ================= START =================
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on ${PORT}`);
+  console.log(`🚀 Server running on ${PORT}`);
 });
