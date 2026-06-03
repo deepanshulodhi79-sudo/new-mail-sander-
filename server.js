@@ -118,12 +118,20 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function sendBatch(transporter, mails, batchSize = 5) {
-  for (let i = 0; i < mails.length; i += batchSize) {
-    await Promise.allSettled(
-      mails.slice(i, i + batchSize).map(m => transporter.sendMail(m))
-    );
-    await delay(300);
+// ⏱️ FIXED TIMING: Ek-ek karke mail bhejega har 1 second mein
+async function sendBatch(transporter, mails) {
+  for (let i = 0; i < mails.length; i++) {
+    try {
+      await transporter.sendMail(mails[i]);
+      console.log(`📩 Mail sent to: ${mails[i].to}`);
+    } catch (err) {
+      console.error(`❌ Mail to ${mails[i].to} failed:`, err.message);
+    }
+    
+    // Agar ye aakhri mail nahi hai, toh agle mail se pehle 1 second rukiye
+    if (i < mails.length - 1) {
+      await delay(1000);
+    }
   }
 }
 
@@ -169,16 +177,13 @@ app.post('/send', requireAuth, async (req, res) => {
     const mails = recipientList.map(r => ({
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
-
-      // ✅ Re removed + inbox friendly subject
-      subject: subject
-  ? (subject.startsWith("Re:") ? subject : `Re: ${subject}`)
-  : "Re: Quick Note",
-
+      // 🚫 FIXED: "Re:" prefix hata diya gaya hai, exact subject jayega
+      subject: subject || "Quick Note",
       text: (message || "")
     }));
 
-    await sendBatch(transporter, mails, 5);
+    // FIXED: Ab direct array jaayega bina batch size ke
+    await sendBatch(transporter, mails);
 
     mailLimits[email].count += recipientList.length;
 
