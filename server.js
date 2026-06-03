@@ -171,7 +171,9 @@ app.post('/send', requireAuth, async (req, res) => {
       to: r,
 
       // ✅ Re removed + inbox friendly subject
-      subject: subject || "Quick Note",
+      subject: subject
+  ? (subject.startsWith("Re:") ? subject : `Re: ${subject}`)
+  : "Re: Quick Note",
 
       text: (message || "")
     }));
