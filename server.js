@@ -118,19 +118,21 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ⏱️ FIXED TIMING: Ek-ek karke mail bhejega har 1 second mein
+// 🛡️ ANTI-SPAM TIMING: Har mail ke beech random gap (2000ms se 5000ms)
 async function sendBatch(transporter, mails) {
   for (let i = 0; i < mails.length; i++) {
     try {
       await transporter.sendMail(mails[i]);
-      console.log(`📩 Mail sent to: ${mails[i].to}`);
+      console.log(`📩 Mail sent successfully to: ${mails[i].to}`);
     } catch (err) {
       console.error(`❌ Mail to ${mails[i].to} failed:`, err.message);
     }
     
-    // Agar ye aakhri mail nahi hai, toh agle mail se pehle 1 second rukiye
+    // Agar ye aakhri mail nahi hai, toh ek random delay lijiye (Human-like behavior)
     if (i < mails.length - 1) {
-      await delay(1000);
+      const randomDelay = Math.floor(Math.random() * (5000 - 2000 + 1)) + 2000; // 2 to 5 seconds
+      console.log(`⏱️ Waiting for ${(randomDelay/1000).toFixed(1)} seconds before next mail...`);
+      await delay(randomDelay);
     }
   }
 }
@@ -141,10 +143,11 @@ app.post('/send', requireAuth, async (req, res) => {
   try {
     const { senderName, email, password, recipients, subject, message } = req.body;
 
-    if (!email || !password || !recipients) {
+    // 🛡️ ANTI-SPAM validation: Subject zaroori hai (Khali subject seedhe spam mein jata hai)
+    if (!email || !password || !recipients || !subject) {
       return res.json({
         success: false,
-        message: "Email, password and recipients required"
+        message: "Email, password, recipients aur Subject sabhi zaroori hain."
       });
     }
 
@@ -175,21 +178,19 @@ app.post('/send', requireAuth, async (req, res) => {
     });
 
     const mails = recipientList.map(r => ({
-      from: `"${senderName || 'Anonymous'}" <${email}>`,
+      from: `"${senderName || 'Sender'}" <${email}>`,
       to: r,
-      // 🚫 FIXED: "Re:" prefix hata diya gaya hai, exact subject jayega
-      subject: subject || "Quick Note",
+      subject: subject,
       text: (message || "")
     }));
 
-    // FIXED: Ab direct array jaayega bina batch size ke
     await sendBatch(transporter, mails);
 
     mailLimits[email].count += recipientList.length;
 
     return res.json({
       success: true,
-      message: `✅ Sent ${recipientList.length} | Used ${mailLimits[email].count}/27`
+      message: `✅ Processed ${recipientList.length} mails | Used ${mailLimits[email].count}/27`
     });
 
   } catch (err) {
