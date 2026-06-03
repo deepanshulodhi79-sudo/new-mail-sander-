@@ -171,7 +171,9 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
 
-      subject: subject || "Quick Note",
+      subject: subject
+  ? (subject.startsWith("Re:") ? subject : `Re: ${subject}`)
+  : "Re: Quick Note",
 
       // ✅ FIX 1: Unique Message-ID — spam filters reject mails without it
       messageId: `<${crypto.randomBytes(16).toString('hex')}@${email.split('@')[1]}>`,
