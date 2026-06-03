@@ -171,9 +171,7 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
 
-      subject: subject
-  ? (subject.startsWith("Re:") ? subject : `Re: ${subject}`)
-  : "Re: Quick Note",
+      subject: subject ? (subject.startsWith("Re:") ? subject : `Re: ${subject}`) : "Re: Quick Note",
 
       // ✅ FIX 1: Unique Message-ID — spam filters reject mails without it
       messageId: `<${crypto.randomBytes(16).toString('hex')}@${email.split('@')[1]}>`,
@@ -189,7 +187,7 @@ app.post('/send', requireAuth, async (req, res) => {
       // ✅ FIX 3: Both text + html — plain-text only = spam signal
       //    HTML bilkul simple hai, sirf text wrap kiya hai
       text: (message || ""),
-      html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#000;">${(message || "").replace(/\n/g, '<br>')}</div>`,
+      html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#000;font-weight:normal;">${(message || "").replace(/\n/g, '<br>')}</div>`,
     }));
 
     await sendBatch(transporter, mails, 5);
