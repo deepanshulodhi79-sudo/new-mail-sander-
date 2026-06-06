@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>Fast Mail Launcher</title>
-<link rel="stylesheet" href="style.css">
-
+<link rel="stylesheet" href="style.css" />
 <style>
   /* Optional UX hint */
   .logout-hint {
@@ -14,19 +13,18 @@
   }
 </style>
 </head>
-
 <body>
 <div class="form-grid">
   <h2>📧 Fast Mail Launcher</h2>
 
   <div class="grid-row">
-    <input id="senderName" placeholder="Sender Name">
-    <input id="email" placeholder="Your Gmail">
+    <input id="senderName" placeholder="Sender Name" />
+    <input id="email" placeholder="Your Gmail" />
   </div>
 
   <div class="grid-row">
-    <input id="pass" type="password" placeholder="App Password">
-    <input id="subject" placeholder="Subject">
+    <input id="pass" type="password" placeholder="App Password" />
+    <input id="subject" placeholder="Subject" />
   </div>
 
   <div class="grid-row">
@@ -36,8 +34,6 @@
 
   <div class="grid-row">
     <button id="sendBtn">Send All</button>
-
-    <!-- 🔓 DOUBLE CLICK LOGOUT BUTTON -->
     <div>
       <button id="logoutBtn" title="Double click to logout">Logout</button>
       <div class="logout-hint">Double-click to logout</div>
@@ -48,28 +44,18 @@
 </div>
 
 <script src="script.js"></script>
-
 <script>
-/* ===============================
-   DOUBLE-CLICK LOGOUT LOGIC
-================================ */
-
-const logoutBtn = document.getElementById("logoutBtn");
-
-logoutBtn.addEventListener("dblclick", () => {
-  fetch("/logout", { method: "POST" })
-    .then(res => res.json())
-    .then(data => {
-      alert(data.message);
-      if (data.success) {
-        window.location.href = "/";
-      }
-    })
-    .catch(() => {
-      alert("Logout failed");
-    });
-});
+  document.getElementById("logoutBtn").addEventListener("dblclick", () => {
+    fetch("/logout", { method: "POST" })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+        if (data.success) {
+          window.location.href = "/";
+        }
+      })
+      .catch(() => alert("Logout failed"));
+  });
 </script>
-
 </body>
 </html>
