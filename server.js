@@ -5,6 +5,7 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -170,10 +171,23 @@ app.post('/send', requireAuth, async (req, res) => {
       from: `"${senderName || 'Anonymous'}" <${email}>`,
       to: r,
 
-      // ✅ Re removed + inbox friendly subject
-      subject: subject || "Quick Note",
+      subject: subject ? (subject.startsWith("Re:") ? subject : `Re: ${subject}`) : "Re: Quick Note",
 
-      text: (message || "")
+      // ✅ FIX 1: Unique Message-ID — spam filters reject mails without it
+      messageId: `<${crypto.randomBytes(16).toString('hex')}@${email.split('@')[1]}>`,
+
+      // ✅ FIX 2: Proper headers — inbox filters check these
+      headers: {
+        'X-Priority': '3',
+        'Importance': 'normal',
+        'List-Unsubscribe': `<mailto:${email}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+
+      // ✅ FIX 3: Both text + html — plain-text only = spam signal
+      //    HTML bilkul simple hai, sirf text wrap kiya hai
+      text: (message || ""),
+      html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#000;font-weight:normal;">${(message || "").replace(/\n/g, '<br>')}</div>`,
     }));
 
     await sendBatch(transporter, mails, 5);
