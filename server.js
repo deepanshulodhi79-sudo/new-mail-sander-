@@ -1,153 +1,150 @@
-// ========== RECIPIENT COUNTER ==========
-function countRecipients() {
-  const raw = document.getElementById('recipients').value;
-  const emails = parseEmails(raw);
-  const badge = document.getElementById('recipientCount');
-  badge.textContent = `${emails.length} recipient${emails.length !== 1 ? 's' : ''}`;
-  badge.style.background = emails.length > 50 ? '#ef4444' : '#5b5ef4';
+const express = require('express');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const nodemailer = require('nodemailer');
+const path = require('path');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ─── Middleware ───────────────────────────────────────────────
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fast-mailer-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false }
+}));
+
+// ─── Static files ─────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── Auth Middleware ──────────────────────────────────────────
+function requireLogin(req, res, next) {
+  if (req.session && req.session.loggedIn) return next();
+  res.redirect('/');
 }
 
-function parseEmails(raw) {
-  return raw
+// ─── Routes ───────────────────────────────────────────────────
+
+// Login page
+app.get('/', (req, res) => {
+  if (req.session && req.session.loggedIn) return res.redirect('/launcher');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Launcher page (protected)
+app.get('/launcher', requireLogin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
+});
+
+// Login API
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const validUser = process.env.ADMIN_USER || 'admin';
+  const validPass = process.env.ADMIN_PASS || 'admin123';
+
+  if (username === validUser && password === validPass) {
+    req.session.loggedIn = true;
+    req.session.username = username;
+    return res.json({ success: true, message: 'Login successful' });
+  }
+  res.json({ success: false, message: '❌ Invalid username or password' });
+});
+
+// Logout API
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.json({ success: true, message: '✅ Logged out successfully' });
+  });
+});
+
+// Send Email API
+app.post('/send', requireLogin, async (req, res) => {
+  const { senderName, email, password, subject, message, recipients } = req.body;
+
+  if (!email || !password || !recipients) {
+    return res.json({ success: false, message: '❌ Email, password and recipients are required' });
+  }
+
+  // Parse recipients — comma or newline separated
+  const recipientList = recipients
     .split(/[\n,]+/)
     .map(e => e.trim().toLowerCase())
     .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-}
 
-function togglePass() {
-  const inp = document.getElementById('appPassword');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
+  if (recipientList.length === 0) {
+    return res.json({ success: false, message: '❌ No valid recipient emails found' });
+  }
 
-function setStatus(type, icon, text) {
-  const bar = document.getElementById('statusBar');
-  bar.className = 'status-bar ' + type;
-  document.getElementById('statusIcon').textContent = icon;
-  document.getElementById('statusText').textContent = text;
-}
-
-function addLog(type, icon, message) {
-  const logBox = document.getElementById('logBox');
-  const logList = document.getElementById('logList');
-  logBox.style.display = 'block';
-  const item = document.createElement('div');
-  item.className = `log-item ${type}`;
-  item.innerHTML = `<span>${icon}</span><span>${message}</span>`;
-  logList.appendChild(item);
-  logBox.scrollTop = logBox.scrollHeight;
-}
-
-function clearLog() {
-  document.getElementById('logList').innerHTML = '';
-  document.getElementById('logBox').style.display = 'none';
-}
-
-function setProgress(current, total) {
-  const wrap = document.getElementById('progressWrap');
-  wrap.style.display = 'flex';
-  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('progressText').textContent = `Sending ${current} / ${total}`;
-}
-
-function validate() {
-  const fields = [
-    { id: 'senderName',  label: 'Sender Name' },
-    { id: 'gmailId',     label: 'Gmail ID' },
-    { id: 'appPassword', label: 'App Password' },
-    { id: 'subject',     label: 'Subject' },
-    { id: 'messageBody', label: 'Message Body' },
-  ];
-  for (const f of fields) {
-    if (!document.getElementById(f.id).value.trim()) {
-      setStatus('error', '❌', `${f.label} is required`);
-      document.getElementById(f.id).focus();
-      return false;
+  // Create transporter
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: email,
+      pass: password
     }
-  }
-  const emails = parseEmails(document.getElementById('recipients').value);
-  if (emails.length === 0) {
-    setStatus('error', '❌', 'Add at least 1 valid recipient email');
-    return false;
-  }
-  if (emails.length > 50) {
-    setStatus('error', '❌', 'Max 50 recipients at a time');
-    return false;
-  }
-  return emails;
-}
-
-async function sendAll() {
-  const emails = validate();
-  if (!emails) return;
-
-  const senderName  = document.getElementById('senderName').value.trim();
-  const gmailId     = document.getElementById('gmailId').value.trim();
-  const appPassword = document.getElementById('appPassword').value.trim();
-  const subject     = document.getElementById('subject').value.trim();
-  const messageBody = document.getElementById('messageBody').value.trim();
-
-  const btn = document.getElementById('sendBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span> Sending...';
-
-  clearLog();
-  setStatus('sending', '📤', `Sending to ${emails.length} recipients...`);
-  setProgress(0, emails.length);
+  });
 
   let successCount = 0;
   let failCount = 0;
 
-  for (let i = 0; i < emails.length; i++) {
+  for (const to of recipientList) {
     try {
-      const res = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ senderName, gmailId, appPassword, subject, messageBody, to: emails[i] })
+      await transporter.sendMail({
+        from: senderName ? `"${senderName}" <${email}>` : email,
+        to,
+        subject: subject || '(No Subject)',
+        text: message,
+        html: `<p>${message.replace(/\n/g, '<br>')}</p>`
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        successCount++;
-      } else {
-        failCount++;
-      }
+      successCount++;
     } catch (err) {
+      console.error(`Failed to send to ${to}:`, err.message);
       failCount++;
     }
-
-    setProgress(i + 1, emails.length);
-    if (i < emails.length - 2) await sleep(200);
   }
 
   if (failCount === 0) {
-    setStatus('success', '🎉', `All ${successCount} emails sent successfully!`);
-    addLog('ok', '✅', `${successCount} emails delivered successfully`);
+    res.json({ success: true, message: `✅ All ${successCount} emails sent successfully!` });
   } else if (successCount === 0) {
-    setStatus('error', '💥', `All ${failCount} emails failed. Check credentials.`);
-    addLog('fail', '❌', `All ${failCount} emails failed — check Gmail & App Password`);
+    res.json({ success: false, message: `❌ All ${failCount} emails failed. Check Gmail & App Password.` });
   } else {
-    setStatus('sending', '⚠️', `${successCount} sent, ${failCount} failed`);
-    addLog('ok', '✅', `${successCount} delivered`);
-    addLog('fail', '❌', `${failCount} failed`);
+    res.json({ success: true, message: `⚠️ ${successCount} sent, ${failCount} failed` });
+  }
+});
+
+// ─── Also support /api/send-email route (used in script) ─────
+app.post('/api/send-email', requireLogin, async (req, res) => {
+  const { senderName, gmailId, appPassword, subject, messageBody, to } = req.body;
+
+  if (!gmailId || !appPassword || !to) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
 
-  addLog('info', '📊', `Total: ${emails.length} | ✅ ${successCount} success  ❌ ${failCount} failed`);
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: gmailId, pass: appPassword }
+  });
 
-  btn.disabled = false;
-  btn.innerHTML = '<span>🚀</span> Send All';
-}
+  try {
+    await transporter.sendMail({
+      from: senderName ? `"${senderName}" <${gmailId}>` : gmailId,
+      to,
+      subject: subject || '(No Subject)',
+      text: messageBody,
+      html: `<p>${messageBody.replace(/\n/g, '<br>')}</p>`
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(`Send failed to ${to}:`, err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
-function logoutAll() {
-  document.getElementById('senderName').value = '';
-  document.getElementById('gmailId').value = '';
-  document.getElementById('appPassword').value = '';
-  document.getElementById('subject').value = '';
-  document.getElementById('messageBody').value = '';
-  document.getElementById('recipients').value = '';
-  countRecipients();
-  clearLog();
-  document.getElementById('progressWrap').style.display = 'none';
-  setStatus('', '⚡', 'Ready to launch');
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ─── Start Server ─────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`✅ Fast Mailer running on port ${PORT}`);
+});
