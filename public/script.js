@@ -1,8 +1,4 @@
-function logout() {
-  fetch('/logout', { method: 'POST' })
-    .then(() => window.location.href = '/');
-}
-
+// Send Mail
 document.getElementById('sendBtn')?.addEventListener('click', () => {
   const senderName = document.getElementById('senderName').value;
   const email = document.getElementById('email').value.trim();
@@ -27,23 +23,17 @@ document.getElementById('sendBtn')?.addEventListener('click', () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ senderName, email, password, subject, message, recipients })
   })
-    .then(r => r.json())
-    .then(data => {
-      status.innerText = data.message;
-
-      if (data.success) {
-        alert('✅ Mail sent successfully!');
-      } else {
-        alert('❌ Failed: ' + data.message);
-      }
-
-      btn.disabled = false;
-      btn.innerText = 'Send All';
-    })
-    .catch(err => {
-      status.innerText = '❌ Error: ' + err.message;
-      alert('❌ Error: ' + err.message);
-      btn.disabled = false;
-      btn.innerText = 'Send All';
-    });
+  .then(r => r.json())
+  .then(data => {
+    status.innerText = data.message;
+    alert(data.success ? '✅ Mail sent successfully!' : '❌ Failed: ' + data.message);
+    btn.disabled = false;
+    btn.innerText = 'Send All';
+  })
+  .catch(err => {
+    status.innerText = '❌ Error: ' + err.message;
+    alert('❌ Error: ' + err.message);
+    btn.disabled = false;
+    btn.innerText = 'Send All';
+  });
 });
