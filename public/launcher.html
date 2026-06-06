@@ -1,61 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>Fast Mail Launcher</title>
-<link rel="stylesheet" href="style.css" />
-<style>
-  /* Optional UX hint */
-  .logout-hint {
-    font-size: 12px;
-    color: #888;
-    margin-top: 4px;
-  }
-</style>
-</head>
-<body>
-<div class="form-grid">
-  <h2>📧 Fast Mail Launcher</h2>
+<!-- CAPTCHA widget -->
+<div class="g-recaptcha" data-sitekey="YOUR_SITE_KEY"></div>
 
-  <div class="grid-row">
-    <input id="senderName" placeholder="Sender Name" />
-    <input id="email" placeholder="Your Gmail" />
-  </div>
+<form id="mailForm">
+  <input id="senderName" placeholder="Sender Name" />
+  <input id="email" placeholder="Gmail" />
+  <input id="pass" placeholder="App Password" type="password" />
+  <input id="subject" placeholder="Subject" />
+  <textarea id="message" placeholder="Message"></textarea>
+  <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
+  <button type="submit" id="sendBtn">Send All</button>
+</form>
 
-  <div class="grid-row">
-    <input id="pass" type="password" placeholder="App Password" />
-    <input id="subject" placeholder="Subject" />
-  </div>
-
-  <div class="grid-row">
-    <textarea id="message" placeholder="Message Body"></textarea>
-    <textarea id="recipients" placeholder="Recipients (comma or newline)"></textarea>
-  </div>
-
-  <div class="grid-row">
-    <button id="sendBtn">Send All</button>
-    <div>
-      <button id="logoutBtn" title="Double click to logout">Logout</button>
-      <div class="logout-hint">Double-click to logout</div>
-    </div>
-  </div>
-
-  <p id="statusMessage"></p>
-</div>
-
-<script src="script.js"></script>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
 <script>
-  document.getElementById("logoutBtn").addEventListener("dblclick", () => {
-    fetch("/logout", { method: "POST" })
-      .then(res => res.json())
-      .then(data => {
-        alert(data.message);
-        if (data.success) {
-          window.location.href = "/";
-        }
-      })
-      .catch(() => alert("Logout failed"));
+  document.getElementById('mailForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+      senderName: document.getElementById('senderName').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('pass').value.trim(),
+      subject: document.getElementById('subject').value.trim(),
+      message: document.getElementById('message').value.trim(),
+      recipients: document.getElementById('recipients').value.trim(),
+      'g-recaptcha-response': grecaptcha.getResponse()
+    };
+
+    if (!data['g-recaptcha-response']) {
+      alert('Please complete the CAPTCHA');
+      return;
+    }
+
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('sendBtn').innerText = '⏳ Sending...';
+
+    fetch('/send', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    })
+    .then(res => res.json())
+    .then(res => {
+      alert(res.message);
+      document.getElementById('sendBtn').innerText = 'Send All';
+      grecaptcha.reset();
+    })
+    .catch(() => {
+      alert('Error occurred');
+      document.getElementById('sendBtn').innerText = 'Send All';
+      grecaptcha.reset();
+    });
   });
 </script>
-</body>
-</html>
