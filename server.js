@@ -1,150 +1,205 @@
+// server.js
+require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 const path = require('path');
-require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
-// ─── Middleware ───────────────────────────────────────────────
-app.use(bodyParser.json());
+// 🔑 Hardcoded login
+const HARD_USERNAME = "vvvvvvvvvvvvvv";
+const HARD_PASSWORD = "vvvvvvvvvvvvvv";
+
+// ================= GLOBAL STATE =================
+
+// Per-sender hourly mail limit
+let mailLimits = {};
+
+// Global launcher lock
+let launcherLocked = false;
+
+// Session store
+const sessionStore = new session.MemoryStore();
+
+// ================= MIDDLEWARE =================
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fast-mailer-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false }
-}));
-
-// ─── Static files ─────────────────────────────────────────────
+app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── Auth Middleware ──────────────────────────────────────────
-function requireLogin(req, res, next) {
-  if (req.session && req.session.loggedIn) return next();
-  res.redirect('/');
+// Session (1 hour life)
+app.use(session({
+  secret: 'bulk-mailer-secret',
+  resave: false,
+  saveUninitialized: true,
+  store: sessionStore,
+  cookie: {
+    maxAge: 60 * 60 * 1000 // 1 hour
+  }
+}));
+
+// ================= FULL RESET =================
+
+function fullServerReset() {
+  console.log("🔁 FULL LAUNCHER RESET");
+  launcherLocked = true;
+  mailLimits = {};
+  sessionStore.clear(() => {
+    console.log("🧹 All sessions cleared");
+  });
+  setTimeout(() => {
+    launcherLocked = false;
+    console.log("✅ Launcher unlocked for fresh login");
+  }, 2000);
 }
 
-// ─── Routes ───────────────────────────────────────────────────
+// ================= AUTH =================
+
+function requireAuth(req, res, next) {
+  if (launcherLocked) return res.redirect('/');
+  if (req.session.user) return next();
+  return res.redirect('/');
+}
+
+// ================= ROUTES =================
 
 // Login page
 app.get('/', (req, res) => {
-  if (req.session && req.session.loggedIn) return res.redirect('/launcher');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Launcher page (protected)
-app.get('/launcher', requireLogin, (req, res) => {
+// Login
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (launcherLocked) {
+    return res.json({
+      success: false,
+      message: "⛔ Launcher reset ho raha hai, thodi der baad login karo"
+    });
+  }
+  if (username === HARD_USERNAME && password === HARD_PASSWORD) {
+    req.session.user = username;
+    setTimeout(fullServerReset, 60 * 60 * 1000); // 1 hour reset
+    return res.json({ success: true });
+  }
+  return res.json({ success: false, message: "❌ Invalid credentials" });
+});
+
+// Launcher page
+app.get('/launcher', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'launcher.html'));
 });
 
-// Login API
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  const validUser = process.env.ADMIN_USER || 'admin';
-  const validPass = process.env.ADMIN_PASS || 'admin123';
-
-  if (username === validUser && password === validPass) {
-    req.session.loggedIn = true;
-    req.session.username = username;
-    return res.json({ success: true, message: 'Login successful' });
-  }
-  res.json({ success: false, message: '❌ Invalid username or password' });
-});
-
-// Logout API
+// ================= LOGOUT =================
 app.post('/logout', (req, res) => {
   req.session.destroy(() => {
-    res.json({ success: true, message: '✅ Logged out successfully' });
-  });
-});
-
-// Send Email API
-app.post('/send', requireLogin, async (req, res) => {
-  const { senderName, email, password, subject, message, recipients } = req.body;
-
-  if (!email || !password || !recipients) {
-    return res.json({ success: false, message: '❌ Email, password and recipients are required' });
-  }
-
-  // Parse recipients — comma or newline separated
-  const recipientList = recipients
-    .split(/[\n,]+/)
-    .map(e => e.trim().toLowerCase())
-    .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-
-  if (recipientList.length === 0) {
-    return res.json({ success: false, message: '❌ No valid recipient emails found' });
-  }
-
-  // Create transporter
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: email,
-      pass: password
-    }
-  });
-
-  let successCount = 0;
-  let failCount = 0;
-
-  for (const to of recipientList) {
-    try {
-      await transporter.sendMail({
-        from: senderName ? `"${senderName}" <${email}>` : email,
-        to,
-        subject: subject || '(No Subject)',
-        text: message,
-        html: `<p>${message.replace(/\n/g, '<br>')}</p>`
-      });
-      successCount++;
-    } catch (err) {
-      console.error(`Failed to send to ${to}:`, err.message);
-      failCount++;
-    }
-  }
-
-  if (failCount === 0) {
-    res.json({ success: true, message: `✅ All ${successCount} emails sent successfully!` });
-  } else if (successCount === 0) {
-    res.json({ success: false, message: `❌ All ${failCount} emails failed. Check Gmail & App Password.` });
-  } else {
-    res.json({ success: true, message: `⚠️ ${successCount} sent, ${failCount} failed` });
-  }
-});
-
-// ─── Also support /api/send-email route (used in script) ─────
-app.post('/api/send-email', requireLogin, async (req, res) => {
-  const { senderName, gmailId, appPassword, subject, messageBody, to } = req.body;
-
-  if (!gmailId || !appPassword || !to) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
-
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: gmailId, pass: appPassword }
-  });
-
-  try {
-    await transporter.sendMail({
-      from: senderName ? `"${senderName}" <${gmailId}>` : gmailId,
-      to,
-      subject: subject || '(No Subject)',
-      text: messageBody,
-      html: `<p>${messageBody.replace(/\n/g, '<br>')}</p>`
+    res.clearCookie('connect.sid');
+    return res.json({
+      success: true,
+      message: "✅ Logged out successfully"
     });
-    res.json({ success: true });
+  });
+});
+
+// ================= HELPERS =================
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendBatch(transporter, mails, batchSize = 5) {
+  for (let i = 0; i < mails.length; i += batchSize) {
+    await Promise.allSettled(
+      mails.slice(i, i + batchSize).map(m => transporter.sendMail(m))
+    );
+    await delay(300);
+  }
+}
+
+// ================= SEND MAIL =================
+
+app.post('/send', requireAuth, async (req, res) => {
+  try {
+    const { senderName, email, password, recipients, subject, message, captchaToken } = req.body;
+
+    // Basic validation
+    if (!email || !password || !recipients) {
+      return res.json({ success: false, message: "Email, password और recipients आवश्यक हैं" });
+    }
+
+    // CAPTCHA validation (Google reCAPTCHA v2/v3)
+    // यहाँ आप अपने CAPTCHA secret key का उपयोग करें
+    const CAPTCHA_SECRET = process.env.CAPTCHA_SECRET;
+    if (!captchaToken || !CAPTCHA_SECRET) {
+      return res.json({ success: false, message: "Captcha validation failed" });
+    }
+
+    const fetch = require('node-fetch');
+    const captchaRes = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${CAPTCHA_SECRET}&response=${captchaToken}`
+    });
+    const captchaData = await captchaRes.json();
+    if (!captchaData.success || captchaData.score < 0.5) {
+      return res.json({ success: false, message: "Captcha verification failed" });
+    }
+
+    const now = Date.now();
+
+    // Hourly reset
+    if (!mailLimits[email] || now - mailLimits[email].startTime > 60 * 60 * 1000) {
+      mailLimits[email] = { count: 0, startTime: now };
+    }
+
+    const recipientList = recipients
+      .split(/[\n,]+/)
+      .map(r => r.trim())
+      .filter(Boolean);
+
+    // Limit check
+    if (mailLimits[email].count + recipientList.length > 27) {
+      return res.json({
+        success: false,
+        message: `❌ Max 27 mails/hour | Remaining: ${27 - mailLimits[email].count}`
+      });
+    }
+
+    // SMTP transporter
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: { user: email, pass: password }
+    });
+
+    // Prepare mails
+    const mails = recipientList.map(r => ({
+      from: `"${senderName || 'Anonymous'}" <${email}>`,
+      to: r,
+      subject: subject || "Quick Note",
+      text: message || ""
+    }));
+
+    // Send mails in batches
+    await sendBatch(transporter, mails, 5);
+
+    // Update limit
+    mailLimits[email].count += recipientList.length;
+
+    return res.json({
+      success: true,
+      message: `✅ Sent ${recipientList.length} | Used ${mailLimits[email].count}/27`
+    });
   } catch (err) {
-    console.error(`Send failed to ${to}:`, err.message);
-    res.status(500).json({ success: false, message: err.message });
+    console.error(err);
+    return res.json({ success: false, message: "Error occurred: " + err.message });
   }
 });
 
-// ─── Start Server ─────────────────────────────────────────────
+// ================= START =================
 app.listen(PORT, () => {
-  console.log(`✅ Fast Mailer running on port ${PORT}`);
+  console.log(`🚀 Mail Launcher running on port ${PORT}`);
 });
